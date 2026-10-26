@@ -1,9 +1,0 @@
-__pycache__/
-.pytest_cache/
-.env
-instance/
-uploads/
-*.pyc
-.test-runtime/
-
-.venv/
