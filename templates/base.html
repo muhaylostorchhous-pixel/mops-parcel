@@ -16,7 +16,7 @@
 <nav>
 {% if user %}
 <a href="{{ '/admin' if user.role=='admin' else '/dashboard' }}">{{ t('Панель') if user.role=='admin' else t('Мои посылки') }}</a>
-<a href="/profile">{{ t('profile.title') }}</a><form method="post" action="/logout"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="nav-logout">{{ t('Выйти') }}</button></form>
+<a href="/parser">{{ t('feed.title') }}</a><a href="/profile">{{ t('profile.title') }}</a><form method="post" action="/logout"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="nav-logout">{{ t('Выйти') }}</button></form>
 {% else %}
 <a href="/login">{{ t('Войти') }}</a><a class="nav-cta" href="/register">{{ t('Открыть аккаунт') }} <span>↗</span></a>
 {% endif %}

@@ -6,9 +6,9 @@ import requests
 from dotenv import load_dotenv
 
 COMMANDS={
- 'ru':[('start','Профиль и мини-приложение'),('orders','Мои посылки'),('leaders','Таблица лидеров'),('language','Сменить язык'),('help','Помощь')],
- 'uk':[('start','Профіль та мінізастосунок'),('orders','Мої посилки'),('leaders','Таблиця лідерів'),('language','Змінити мову'),('help','Допомога')],
- 'en':[('start','Profile and mini app'),('orders','My parcels'),('leaders','Leaderboard'),('language','Change language'),('help','Help')],
+ 'ru':[('parser','Лента объявлений'),('start','Профиль и мини-приложение'),('orders','Мои посылки'),('leaders','Таблица лидеров'),('language','Сменить язык'),('help','Помощь')],
+ 'uk':[('parser','Стрічка оголошень'),('start','Профіль та мінізастосунок'),('orders','Мої посилки'),('leaders','Таблиця лідерів'),('language','Змінити мову'),('help','Допомога')],
+ 'en':[('parser','Listing feed'),('start','Profile and mini app'),('orders','My parcels'),('leaders','Leaderboard'),('language','Change language'),('help','Help')],
 }
 
 def configure():

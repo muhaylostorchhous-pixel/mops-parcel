@@ -225,7 +225,7 @@ def test_new_pages_complete_translation_and_forms_csrf(ctx,lang):
 
 def test_migration_preserves_legacy_accounts_files_and_orders(tmp_path,monkeypatch):
     from app import create_app
-    tree=ast.parse(Path('app.py').read_text())
+    tree=ast.parse(Path('app.py').read_text(encoding='utf-8-sig'))
     schema=next(n.args[0].value for n in ast.walk(tree) if isinstance(n,ast.Call) and isinstance(n.func,ast.Attribute) and n.func.attr=='executescript')
     path=tmp_path/'legacy.sqlite3';uploads=tmp_path/'uploads';uploads.mkdir();(uploads/'legacy.png').write_bytes(b'original-image')
     password=generate_password_hash('legacy-password')
@@ -250,7 +250,8 @@ def test_generated_local_session_secret_is_private_and_persistent(tmp_path):
     config={'TESTING':True,'SECRET_KEY':'replace-this','DATABASE':str(tmp_path/'db.sqlite3'),'UPLOAD_FOLDER':str(tmp_path/'uploads')}
     first=create_app(config);second=create_app(config)
     assert len(first.secret_key)>=48 and first.secret_key==second.secret_key
-    assert (tmp_path/'session.secret').stat().st_mode & 0o077==0
+    if __import__('os').name=='posix':
+        assert (tmp_path/'session.secret').stat().st_mode & 0o077==0
 
 def test_tracking_generator_retries_collision(ctx,monkeypatch):
     app,client,_=ctx;register_and_approve(ctx);create_order(client)
@@ -286,7 +287,7 @@ def test_source_has_no_star_glyphs_or_missing_translation_keys():
     CATALOG.update(__import__('extra_i18n').EXTRA)
     paths=[*Path('templates').glob('*.html'),*Path('static').glob('*')]
     for path in paths:
-        source=path.read_text()
+        source=path.read_text(encoding='utf-8-sig')
         assert not re.search('[✳✦★☆⭐🌟✨]',source)
         keys=re.findall(r"\b(?:t|tr)\('([^']+)'",source)
         assert all(key in CATALOG or key.endswith('.') for key in keys)

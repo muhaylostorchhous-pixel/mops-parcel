@@ -1,3 +1,7 @@
+## Обновление Discord
+
+Добавлена лента /parser и команда Telegram /parser. Подключение: DISCORD_SETUP_RU.txt. Нужны DISCORD_BOT_TOKEN и DISCORD_CHANNEL_ID, установка бота на сервер и права чтения. Обновление раз в минуту при открытой вкладке, без отдельного фонового процесса. Прежние функции сохранены.
+
 # Current update
 
 For an existing installation read **START_RU.txt**, **UPDATE_RU.md** and **TEST_REPORT_RU.txt** first. Replace source files only; keep your database, uploads and .env. Install the updated requirements. No new repository is required.

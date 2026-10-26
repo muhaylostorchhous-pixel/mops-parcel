@@ -24,6 +24,8 @@ CATALOG.update(EXTRA)
 def install_features(app, db, stamp, login_required, admin_required):
     feature = Features(app, db, stamp)
     app.extensions['mops_features'] = feature
+    from discord_feed import install_discord
+    install_discord(app, db, login_required)
     with app.app_context():
         migrate(db(), app.config['DATABASE'])
     app.config.setdefault('CSRF_ENABLED', True)
@@ -431,6 +433,8 @@ class Features:
         rows=[]
         if parsed.scheme=='https' and parsed.hostname and not parsed.username and not parsed.password:
             rows.append([{'text':t('bot.open',lang),'web_app':{'url':url}}])
+        if rows:
+            rows.append([{'text':t('feed.title',lang),'web_app':{'url':url+'/parser'}}])
         rows.append([{'text':t('bot.leaders',lang),'callback_data':'leaders'},{'text':t('Язык',lang),'callback_data':'language'}])
         return rows
 
@@ -475,6 +479,8 @@ class Features:
                 lines.append(f"{i}. {label} — {row['completed']} · {t(rank_key(row['completed']),lang)}")
             if not rows: lines.append(t('bot.no_leaders',lang))
             self.telegram.message(chat_id,'\n'.join(lines),self.webapp_keyboard(lang))
+        elif command=='/parser':
+            self.telegram.message(chat_id,t('feed.subtitle',lang),self.webapp_keyboard(lang))
         elif command=='/orders' and user:
             orders=c.execute('SELECT item,status,parcel_code FROM orders WHERE user_id=? AND archived=0 ORDER BY id DESC LIMIT 10',(user['id'],)).fetchall()
             lines=[t('Мои посылки',lang)]+[f"{o['parcel_code'] or '—'} · {o['item']} · {t(o['status'],lang)}" for o in orders]

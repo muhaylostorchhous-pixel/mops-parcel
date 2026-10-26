@@ -1,3 +1,5 @@
+НОВОЕ: вкладка «Парсер» из Discord. Для подключения читайте DISCORD_SETUP_RU.txt.
+
 MOPS PARCEL — ОБНОВЛЕНИЕ СУЩЕСТВУЮЩЕГО ПРОЕКТА
 
 1. Скачайте и распакуйте mops-parcel-project.zip.
