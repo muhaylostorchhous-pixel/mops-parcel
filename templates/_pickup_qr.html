@@ -1,24 +1,18 @@
-{% if order.delivery=='InPost locker' and order.delivered_at and order.status in ['Доставлено','Архив'] %}
-<details class="pickup-qr-panel" {% if not order.pickup_qr %}open{% endif %}>
-  <summary>
-    <span>{{ t('qr.title') }}</span>
-    <span class="status-pill">{{ t('qr.added') if order.pickup_qr else t('qr.required') }}</span>
-  </summary>
+{% if order.delivery=='InPost locker' %}
+<details class="pickup-qr-panel" {% if order.vinted_delivered and not order.pickup_qr %}open{% endif %}>
+  <summary><span>{{ t('qr.title') }}</span><span class="status-pill">{% if order.pickup_qr %}{{ t('qr.added') }}{% elif order.vinted_delivered %}{{ t('qr.required') }}{% else %}{{ t('qr.waiting_vinted') }}{% endif %}</span></summary>
   <div class="pickup-qr-content">
-    {% if order.pickup_qr %}
-    <a href="{{ url_for('pickup_qr',oid=order.id) }}" target="_blank" rel="noopener">
-      <img class="pickup-qr-preview" src="{{ url_for('pickup_qr',oid=order.id) }}" alt="{{ t('qr.title') }}">
-    </a>
-    <a class="text-button" href="{{ url_for('pickup_qr',oid=order.id) }}" target="_blank" rel="noopener">{{ t('qr.view') }} ↗</a>
+    {% if not order.vinted_delivered %}
+      <p>{{ t('qr.vinted_hint') }}</p>
+      {% if user.role!='admin' %}<form method="post" action="{{ url_for('vinted_delivered',oid=order.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="button primary small-btn">{{ t('qr.mark_vinted') }}</button></form>{% endif %}
+    {% elif order.pickup_qr %}
+      <a href="{{ url_for('pickup_qr',oid=order.id) }}" target="_blank" rel="noopener"><img class="pickup-qr-preview" src="{{ url_for('pickup_qr',oid=order.id) }}" alt="{{ t('qr.title') }}"></a>
+      <a class="text-button" href="{{ url_for('pickup_qr',oid=order.id) }}" target="_blank" rel="noopener">{{ t('qr.view') }} ↗</a>
     {% else %}
-    <p>{{ t('qr.required_hint') }}</p>
+      <p>{{ t('qr.required_hint') }}</p>
     {% endif %}
-    {% if user.role!='admin' %}
-    <form method="post" action="{{ url_for('pickup_qr',oid=order.id) }}" enctype="multipart/form-data">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <label class="file-button">{{ t('qr.replace') if order.pickup_qr else t('qr.upload') }}<input type="file" name="pickup_qr" accept="image/jpeg,image/png,image/webp" required></label>
-      <button class="button primary small-btn">{{ t('qr.replace') if order.pickup_qr else t('qr.upload') }} ↗</button>
-    </form>
+    {% if order.vinted_delivered and user.role!='admin' %}
+      <form method="post" action="{{ url_for('pickup_qr',oid=order.id) }}" enctype="multipart/form-data"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><label class="file-button">{{ t('qr.upload') }}<input type="file" name="pickup_qr" accept="image/jpeg,image/png,image/webp" required></label><button class="button primary small-btn">{{ t('qr.upload') }} ↗</button></form>
     {% endif %}
   </div>
 </details>

@@ -49,8 +49,11 @@ def install_features(app, db, stamp, login_required, admin_required):
     app.add_url_rule('/profile/addresses','add_address',feature.signed_in(feature.add_address),methods=['POST'])
     app.add_url_rule('/onboarding/complete','onboarding_done',feature.signed_in(feature.onboarding_done),methods=['POST'])
     app.add_url_rule('/orders/<int:oid>/pay','pay_order',login_required(feature.pay_order),methods=['GET','POST'])
+    app.add_url_rule('/orders/<int:oid>/return-payment','return_payment',login_required(feature.return_payment),methods=['GET','POST'])
     app.add_url_rule('/orders/<int:oid>/files/<kind>/send','send_file',login_required(feature.send_file),methods=['POST'])
     app.add_url_rule('/orders/<int:oid>/pickup-qr','pickup_qr',login_required(feature.pickup_qr),methods=['GET','POST'])
+    app.add_url_rule('/orders/<int:oid>/return-qr','return_qr',login_required(feature.return_qr),methods=['GET','POST'])
+    app.add_url_rule('/orders/<int:oid>/vinted-delivered','vinted_delivered',login_required(feature.vinted_delivered),methods=['POST'])
     app.add_url_rule('/admin/payment-proofs/<int:pid>/<decision>','payment_review',admin_required(feature.payment_review),methods=['POST'])
     app.add_url_rule('/admin/payment-proofs/<int:pid>/files/<kind>','payment_file',admin_required(feature.payment_file),methods=['POST'])
 
@@ -304,27 +307,42 @@ class Features:
         return redirect(url_for('admin')+'#orders')
 
     def pay_order(self,oid):
+        return self.payment_flow(oid,'delivery')
+
+    def return_payment(self,oid):
+        return self.payment_flow(oid,'return')
+
+    def payment_flow(self,oid,purpose):
         o=self.owned_order(oid)
-        if not o['report'] or not o['fee'] or o['status']=='Отклонено': abort(409)
+        if purpose=='delivery':
+            if not o['report'] or not o['fee'] or o['status']=='Отклонено': abort(409)
+            amount=o['fee'];status=o['payment_status']
+        else:
+            if o['photo_decision']!='Запрошен возврат': abort(409)
+            amount='250';status=o['return_payment_status']
         c=self.db()
         if request.method=='POST':
-            if o['payment_status'] in ('paid','pending'): abort(409)
+            if status in ('paid','pending'): abort(409)
             try:
                 screenshot=self.read_file('screenshot');receipt=self.read_file('receipt',pdf=True)
                 if hashlib.sha256(screenshot[0]).digest()==hashlib.sha256(receipt[0]).digest(): raise ValueError(t('error.same_evidence'))
                 c.execute('BEGIN IMMEDIATE')
-                fresh=c.execute('SELECT payment_status,fee FROM orders WHERE id=?',(oid,)).fetchone()
-                if fresh['payment_status'] in ('paid','pending'): c.rollback();abort(409)
+                fresh=c.execute('SELECT payment_status,fee,photo_decision,return_payment_status FROM orders WHERE id=?',(oid,)).fetchone()
+                fresh_status=fresh['payment_status'] if purpose=='delivery' else fresh['return_payment_status']
+                if (purpose=='delivery' and fresh_status in ('paid','pending')) or (purpose=='return' and (fresh_status in ('paid','pending') or fresh['photo_decision']!='Запрошен возврат')):
+                    c.rollback();abort(409)
                 screenshot_name=self.save_file(screenshot,'payment');receipt_name=self.save_file(receipt,'receipt')
-                c.execute('INSERT INTO order_payments(order_id,user_id,amount,screenshot,receipt,created) VALUES(?,?,?,?,?,?)',(oid,g.user['id'],fresh['fee'],screenshot_name,receipt_name,self.stamp()))
-                c.execute("UPDATE orders SET payment_status='pending' WHERE id=?",(oid,));c.commit()
-                self.telegram.message(self.app.config['TELEGRAM_ADMIN_CHAT_ID'],t('bot.payment_review',id=oid,item=o['item']))
+                amount=fresh['fee'] if purpose=='delivery' else '250'
+                c.execute('INSERT INTO order_payments(order_id,user_id,amount,screenshot,receipt,created,purpose) VALUES(?,?,?,?,?,?,?)',(oid,g.user['id'],amount,screenshot_name,receipt_name,self.stamp(),purpose))
+                column='payment_status' if purpose=='delivery' else 'return_payment_status'
+                c.execute(f"UPDATE orders SET {column}='pending' WHERE id=?",(oid,));c.commit()
+                self.telegram.message(self.app.config['TELEGRAM_ADMIN_CHAT_ID'],f"Оплата {'возврата 250 грн' if purpose=='return' else 'доставки'} на проверку · заявка MP · {oid:04d} · {o['item']}")
                 flash(t('payment.submitted'),'success');return redirect(url_for('dashboard'))
             except ValueError as e: flash(str(e),'error')
             except sqlite3.IntegrityError: c.rollback();abort(409)
-        history=c.execute('SELECT * FROM order_payments WHERE order_id=? ORDER BY id DESC',(oid,)).fetchall()
+        history=c.execute('SELECT * FROM order_payments WHERE order_id=? AND purpose=? ORDER BY id DESC',(oid,purpose)).fetchall()
         card=c.execute("SELECT value FROM settings WHERE key='payment_card'").fetchone()[0]
-        return render_template('payment.html',order=o,payments=history,payment_card=card)
+        return render_template('payment.html',order=o,payments=history,payment_card=card,payment_status=status,payment_amount=amount,payment_kind=purpose)
 
     def payment_review(self,pid,decision):
         if decision not in ('approve','reject'): abort(404)
@@ -337,10 +355,12 @@ class Features:
             c.rollback();flash(t('error.reason'),'error');return redirect(url_for('admin')+'#payment-proofs')
         state='paid' if decision=='approve' else 'rejected'
         c.execute('UPDATE order_payments SET state=?,reason=?,reviewed=? WHERE id=?',(state,reason,self.stamp(),pid))
-        c.execute('UPDATE orders SET payment_status=? WHERE id=?',('paid' if decision=='approve' else 'unpaid',p['order_id']))
+        status_column='return_payment_status' if p['purpose']=='return' else 'payment_status'
+        c.execute(f'UPDATE orders SET {status_column}=? WHERE id=?',('paid' if decision=='approve' else 'unpaid',p['order_id']))
         c.execute('INSERT INTO order_audit(order_id,user_id,action,created) VALUES(?,?,?,?)',(p['order_id'],g.user['id'],'payment.'+state,self.stamp()))
         c.commit()
-        self.notify_user(p['user_id'],'bot.payment_'+state,id=p['order_id'],reason=reason)
+        notice=('bot.return_payment_'+state) if p['purpose']=='return' else ('bot.payment_'+state)
+        self.notify_user(p['user_id'],notice,id=p['order_id'],reason=reason)
         flash(t('payment.'+state),'success');return redirect(url_for('admin')+'#payment-proofs')
 
     def change(self,oid):
@@ -422,18 +442,60 @@ class Features:
             validated=self.read_file('pickup_qr')
             c.execute('BEGIN IMMEDIATE')
             order=self.owned_order(oid)
-            if order['delivery']!='InPost locker' or order['status'] not in ('Доставлено','Архив') or not order['delivered_at']:
+            if order['delivery']!='InPost locker' or not order['vinted_delivered']:
                 c.rollback();abort(409)
             name=self.save_file(validated,'pickup_qr')
             c.execute('UPDATE orders SET pickup_qr=? WHERE id=?',(name,oid));c.commit()
         except ValueError as e:
             c.rollback();flash(str(e),'error');return redirect(url_for('parcel_detail',oid=oid))
-        message=f'QR-код к посылке MP · {oid:04d} прикреплён! Можно забирать посылку с локера InPost.'
+        message=f'QR-код к посылке MP · {oid:04d} прикреплён! Клиент отметил доставку на Vinted. Можно забирать посылку с локера InPost.'
         if not self.telegram.document(self.app.config.get('TELEGRAM_ADMIN_CHAT_ID',''),name,message):
             service=self.app.extensions.get('services')
             if service: service.queue_chat(self.app.config.get('TELEGRAM_ADMIN_CHAT_ID',''),message)
             else: self.telegram.message(self.app.config.get('TELEGRAM_ADMIN_CHAT_ID',''),message)
         flash(t('qr.uploaded'),'success')
+        return redirect(url_for('parcel_detail',oid=oid))
+
+    def vinted_delivered(self,oid):
+        order=self.owned_order(oid)
+        if order['delivery']!='InPost locker': abort(409)
+        if not order['vinted_delivered']:
+            self.db().execute('UPDATE orders SET vinted_delivered=1,updated=? WHERE id=?',(self.stamp(),oid));self.db().commit()
+            self.db().execute('INSERT INTO order_audit(order_id,user_id,action,created) VALUES(?,?,?,?)',(oid,g.user['id'],'Клиент отметил доставку на Vinted',self.stamp()));self.db().commit()
+        flash(t('qr.vinted_marked'),'success')
+        return redirect(url_for('parcel_detail',oid=oid))
+
+    def return_qr(self,oid):
+        if request.method=='GET':
+            order=self.owned_order(oid,admin=True)
+            if order['photo_decision']!='Запрошен возврат' or not order['return_qr']: abort(404)
+            service=self.app.extensions.get('services')
+            data=service.file_bytes(order['return_qr']) if service else (Path(self.app.config['UPLOAD_FOLDER'])/order['return_qr']).read_bytes()
+            if data is None: abort(404)
+            ext=Path(order['return_qr']).suffix.lower()
+            mimetype={'.jpg':'image/jpeg','.jpeg':'image/jpeg','.png':'image/png','.webp':'image/webp'}.get(ext,'application/octet-stream')
+            return send_file(io.BytesIO(data),mimetype=mimetype,download_name=order['return_qr'],as_attachment=False)
+        if g.user['role']!='client': abort(403)
+        c=self.db()
+        try:
+            upload=request.files.get('return_qr')
+            if not upload or not upload.filename:
+                flash(t('qr.file_missing'),'error');return redirect(url_for('parcel_detail',oid=oid))
+            validated=self.read_file('return_qr')
+            c.execute('BEGIN IMMEDIATE')
+            order=self.owned_order(oid)
+            if order['photo_decision']!='Запрошен возврат' or order['return_payment_status']!='paid':
+                c.rollback();abort(409)
+            name=self.save_file(validated,'return_qr')
+            c.execute('UPDATE orders SET return_qr=? WHERE id=?',(name,oid));c.commit()
+        except ValueError as e:
+            c.rollback();flash(str(e),'error');return redirect(url_for('parcel_detail',oid=oid))
+        message=f'QR-код для возврата по посылке MP · {oid:04d} прикреплён.'
+        if not self.telegram.document(self.app.config.get('TELEGRAM_ADMIN_CHAT_ID',''),name,message):
+            service=self.app.extensions.get('services')
+            if service: service.queue_chat(self.app.config.get('TELEGRAM_ADMIN_CHAT_ID',''),message)
+            else: self.telegram.message(self.app.config.get('TELEGRAM_ADMIN_CHAT_ID',''),message)
+        flash(t('qr.return_uploaded'),'success')
         return redirect(url_for('parcel_detail',oid=oid))
 
     def payment_file(self,pid,kind):
@@ -443,7 +505,8 @@ class Features:
         chat=self.recipient_chat()
         if not chat: flash(t('file.link_first'),'error')
         else:
-            ok=self.telegram.document(chat,p[kind],t('payment.evidence_caption',id=p['order_id']))
+            caption=(f"Подтверждение оплаты {'возврата 250 грн' if p['purpose']=='return' else 'доставки'} · MP · {p['order_id']:04d}")
+            ok=self.telegram.document(chat,p[kind],caption)
             flash(t('file.sent' if ok else 'file.failed'),'success' if ok else 'error')
         return redirect(url_for('admin')+'#payment-proofs')
 

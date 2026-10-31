@@ -34,7 +34,7 @@ def migrate(db, database):
             db.backup(dest)
     additions = {
         'users': {'phone':"TEXT DEFAULT ''", 'language':"TEXT DEFAULT 'ru'", 'onboarding_completed':'INTEGER DEFAULT 1', 'leaderboard_public':'INTEGER DEFAULT 0'},
-        'orders': {'submission_key':"TEXT DEFAULT ''", 'product_type':"TEXT DEFAULT ''", 'ua_name':"TEXT DEFAULT ''", 'ua_phone':"TEXT DEFAULT ''", 'ua_city':"TEXT DEFAULT ''", 'ua_branch':"TEXT DEFAULT ''", 'uk_address':"TEXT DEFAULT ''", 'parcel_code':"TEXT DEFAULT ''", 'payment_status':"TEXT DEFAULT 'unpaid'", 'delivered_at':"TEXT DEFAULT ''", 'pickup_qr':"TEXT DEFAULT ''"},
+        'orders': {'submission_key':"TEXT DEFAULT ''", 'product_type':"TEXT DEFAULT ''", 'ua_name':"TEXT DEFAULT ''", 'ua_phone':"TEXT DEFAULT ''", 'ua_city':"TEXT DEFAULT ''", 'ua_branch':"TEXT DEFAULT ''", 'uk_address':"TEXT DEFAULT ''", 'parcel_code':"TEXT DEFAULT ''", 'payment_status':"TEXT DEFAULT 'unpaid'", 'delivered_at':"TEXT DEFAULT ''", 'pickup_qr':"TEXT DEFAULT ''", 'vinted_delivered':"INTEGER DEFAULT 0", 'return_payment_status':"TEXT DEFAULT 'unpaid'", 'return_qr':"TEXT DEFAULT ''"},
     }
     db.execute('BEGIN IMMEDIATE')
     try:
@@ -47,7 +47,7 @@ def migrate(db, database):
             "CREATE UNIQUE INDEX IF NOT EXISTS order_submission_unique ON orders(user_id,submission_key) WHERE submission_key<>''",
             "CREATE INDEX IF NOT EXISTS orders_owner_archive ON orders(user_id,archived,id)",
             "CREATE TABLE IF NOT EXISTS addresses(id INTEGER PRIMARY KEY,user_id INTEGER NOT NULL REFERENCES users(id),name TEXT NOT NULL,phone TEXT NOT NULL,city TEXT NOT NULL,branch TEXT NOT NULL,created TEXT NOT NULL)",
-            "CREATE TABLE IF NOT EXISTS order_payments(id INTEGER PRIMARY KEY,order_id INTEGER NOT NULL REFERENCES orders(id),user_id INTEGER NOT NULL REFERENCES users(id),amount TEXT NOT NULL,screenshot TEXT NOT NULL,receipt TEXT NOT NULL,state TEXT DEFAULT 'pending',reason TEXT DEFAULT '',created TEXT NOT NULL,reviewed TEXT DEFAULT '')",
+            "CREATE TABLE IF NOT EXISTS order_payments(id INTEGER PRIMARY KEY,order_id INTEGER NOT NULL REFERENCES orders(id),user_id INTEGER NOT NULL REFERENCES users(id),amount TEXT NOT NULL,screenshot TEXT NOT NULL,receipt TEXT NOT NULL,state TEXT DEFAULT 'pending',reason TEXT DEFAULT '',created TEXT NOT NULL,reviewed TEXT DEFAULT '',purpose TEXT DEFAULT 'delivery')",
             "CREATE UNIQUE INDEX IF NOT EXISTS payment_one_pending ON order_payments(order_id) WHERE state='pending'",
             "CREATE UNIQUE INDEX IF NOT EXISTS parcel_code_unique ON orders(parcel_code) WHERE parcel_code<>''",
             "CREATE TABLE IF NOT EXISTS bot_preferences(chat_id TEXT PRIMARY KEY,language TEXT NOT NULL)",
@@ -58,6 +58,12 @@ def migrate(db, database):
         ]
         for sql in statements:
             db.execute(sql)
+        payment_columns = {row[1] for row in db.execute('PRAGMA table_info(order_payments)')}
+        if 'purpose' not in payment_columns:
+            db.execute("ALTER TABLE order_payments ADD COLUMN purpose TEXT DEFAULT 'delivery'")
+        db.execute('DROP INDEX IF EXISTS payment_one_pending')
+        db.execute("CREATE UNIQUE INDEX payment_one_pending ON order_payments(order_id,purpose) WHERE state='pending'")
+        db.execute("UPDATE orders SET vinted_delivered=1 WHERE pickup_qr<>'' AND vinted_delivered=0")
         db.execute("UPDATE orders SET delivered_at=updated WHERE status='Доставлено' AND delivered_at=''")
         for row in db.execute("SELECT id FROM users WHERE telegram_token='' OR telegram_token IS NULL").fetchall():
             db.execute('UPDATE users SET telegram_token=? WHERE id=?',(secrets.token_urlsafe(24),row[0]))

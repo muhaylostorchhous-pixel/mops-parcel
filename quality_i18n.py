@@ -62,12 +62,25 @@ ux.duplicate|Эта заявка уже отправлена. Открываем
 ux.session|Обнови страницу и попробуй ещё раз.|Онови сторінку та спробуй ще раз.|Refresh the page and try again.
 qr.title|Код получения InPost|Код отримання InPost|InPost pickup code
 qr.required|Обязательно добавить|Обов’язково додати|Required
-qr.required_hint|Посылка доставлена в локер. Обязательно прикрепите фото QR-кода, чтобы забрать её.|Посилку доставлено до локера. Обов’язково додайте фото QR-коду, щоб забрати її.|The parcel has arrived at the locker. Upload its QR code photo to pick it up.
+qr.required_hint|Vinted показывает статус «Доставлено». Обязательно прикрепите QR-код, чтобы забрать посылку из локера.|У Vinted відображається статус «Доставлено». Обов’язково додайте QR-код, щоб забрати посилку з локера.|Vinted shows “Delivered.” Attach the QR code to pick up the parcel from the locker.
 qr.upload|Прикрепить фото QR-кода|Додати фото QR-коду|Upload QR code photo
 qr.replace|Обновить QR-фото|Оновити QR-фото|Replace QR code photo
 qr.added|Добавлен|Додано|Added
 qr.uploaded|QR-код сохранён. Администратор уведомлён.|QR-код збережено. Адміністратора повідомлено.|QR code saved. The administrator has been notified.
 qr.view|Открыть QR-код|Відкрити QR-код|Open QR code
 qr.file_missing|Прикрепите фото QR-кода.|Додайте фото QR-коду.|Attach a QR code photo.
+qr.waiting_vinted|Ждём отметку о доставке на Vinted|Очікуємо позначку про доставку на Vinted|Waiting for Vinted delivery confirmation
+qr.vinted_hint|Отслеживайте доставку в Vinted. Когда там появится статус «Доставлено», отметьте это здесь — после этого прикрепите QR-код.|Відстежуйте доставку у Vinted. Коли там з’явиться статус «Доставлено», позначте це тут — після цього додайте QR-код.|Track the parcel in Vinted. When Vinted shows “Delivered,” mark it here, then attach the QR code.
+qr.mark_vinted|На Vinted доставлено|У Vinted доставлено|Delivered on Vinted
+qr.vinted_marked|Отметка сохранена. Теперь прикрепите QR-код.|Позначку збережено. Тепер додайте QR-код.|Confirmation saved. Now attach the QR code.
+return.title|Возврат посылки|Повернення посилки|Parcel return
+return.fee_hint|Для возврата оплатите 250 грн. После подтверждения оплаты прикрепите QR-код возврата.|Для повернення сплатіть 250 грн. Після підтвердження оплати додайте QR-код повернення.|Pay UAH 250 for the return. After payment is confirmed, attach the return QR code.
+return.pay|Оплатить возврат|Сплатити повернення|Pay return fee
+return.pay_title|Оплата возврата|Оплата повернення|Return payment
+return.fee_label|Доплата за возврат|Доплата за повернення|Return fee
+return.qr_title|QR-код возврата|QR-код повернення|Return QR code
+return.qr_upload|Прикрепить QR-код возврата|Додати QR-код повернення|Attach return QR code
+return.qr_missing|Клиент ещё не прикрепил QR-код возврата.|Клієнт ще не додав QR-код повернення.|The client has not attached the return QR code yet.
+return.qr_uploaded|QR-код возврата прикреплён. Администратор уведомлён.|QR-код повернення додано. Адміністратора повідомлено.|Return QR code attached. The administrator has been notified.
 '''
 STRINGS = {key: dict(zip(('ru', 'uk', 'en'), values)) for key, *values in (line.split('|') for line in ROWS.strip().splitlines())}

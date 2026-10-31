@@ -1,0 +1,18 @@
+{% if order.photo_decision=='Запрошен возврат' %}
+<details class="pickup-qr-panel return-qr-panel" {% if order.return_payment_status=='paid' and not order.return_qr %}open{% endif %}>
+  <summary><span>{{ t('return.title') }}</span><span class="status-pill">{{ t('payment.'+order.return_payment_status) }}</span></summary>
+  <div class="pickup-qr-content">
+    <p>{{ t('return.fee_hint') }}</p>
+    {% if order.return_payment_status=='unpaid' %}
+      {% if user.role!='admin' %}<a class="button primary small-btn" href="{{ url_for('return_payment',oid=order.id) }}">{{ t('return.pay') }} · 250 ₴ ↗</a>{% endif %}
+    {% elif order.return_payment_status=='pending' %}
+      <p>{{ t('payment.pending') }}</p>
+    {% elif order.return_qr %}
+      <a href="{{ url_for('return_qr',oid=order.id) }}" target="_blank" rel="noopener"><img class="pickup-qr-preview" src="{{ url_for('return_qr',oid=order.id) }}" alt="{{ t('return.qr_title') }}"></a>
+      <a class="text-button" href="{{ url_for('return_qr',oid=order.id) }}" target="_blank" rel="noopener">{{ t('qr.view') }} ↗</a>
+    {% elif user.role!='admin' %}
+      <form method="post" action="{{ url_for('return_qr',oid=order.id) }}" enctype="multipart/form-data"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><label class="file-button">{{ t('return.qr_upload') }}<input type="file" name="return_qr" accept="image/jpeg,image/png,image/webp" required></label><button class="button primary small-btn">{{ t('return.qr_upload') }} ↗</button></form>
+    {% else %}<p>{{ t('return.qr_missing') }}</p>{% endif %}
+  </div>
+</details>
+{% endif %}

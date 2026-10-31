@@ -106,6 +106,8 @@ bot.report_file|Фотоотчёт · #{id} · {item}. На возврат ил�
 bot.payment_review|Проверьте оплату заявки #{id}: {item}. Оба документа доступны в админ-панели.|Перевірте оплату заявки №{id}: {item}. Обидва документи доступні в панелі адміністратора.|Review payment for parcel #{id}: {item}. Both documents are available in the admin dashboard.
 bot.payment_paid|Оплата заявки #{id} подтверждена.|Оплату заявки №{id} підтверджено.|Payment for parcel #{id} confirmed.
 bot.payment_rejected|Оплата заявки #{id} отклонена. Причина: {reason}|Оплату заявки №{id} відхилено. Причина: {reason}|Payment for parcel #{id} rejected. Reason: {reason}
+bot.return_payment_paid|Оплата возврата по посылке №{id} подтверждена. Прикрепите QR-код возврата в кабинете.|Оплату повернення посилки №{id} підтверджено. Додайте QR-код повернення в кабінеті.|Return payment for parcel #{id} confirmed. Attach the return QR code in your account.
+bot.return_payment_rejected|Оплата возврата по посылке №{id} отклонена. Причина: {reason}|Оплату повернення посилки №{id} відхилено. Причина: {reason}|Return payment for parcel #{id} rejected. Reason: {reason}
 bot.approved|Доступ к Mops Parcel подтверждён. Можно оформить первую посылку.|Доступ до Mops Parcel підтверджено. Можна оформити першу посилку.|Your Mops Parcel account is approved. You can register your first parcel.
 bot.bonus|Отзыв проверен, бонус начислен. Спасибо!|Відгук перевірено, бонус нараховано. Дякуємо!|Your review is approved and your bonus has been added. Thank you!
 error.telegram|Укажите корректный Telegram username без пробелов.|Укажіть коректне ім'я користувача Telegram без пробілів.|Enter a valid Telegram username without spaces.
