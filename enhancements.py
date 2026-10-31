@@ -10,7 +10,7 @@ from functools import wraps
 from pathlib import Path
 from urllib.parse import urlparse
 
-from flask import abort, flash, g, redirect, render_template, request, session, url_for
+from flask import abort, flash, g, redirect, render_template, request, send_file, session, url_for
 from PIL import Image, UnidentifiedImageError
 from werkzeug.security import check_password_hash, generate_password_hash
 
@@ -50,6 +50,7 @@ def install_features(app, db, stamp, login_required, admin_required):
     app.add_url_rule('/onboarding/complete','onboarding_done',feature.signed_in(feature.onboarding_done),methods=['POST'])
     app.add_url_rule('/orders/<int:oid>/pay','pay_order',login_required(feature.pay_order),methods=['GET','POST'])
     app.add_url_rule('/orders/<int:oid>/files/<kind>/send','send_file',login_required(feature.send_file),methods=['POST'])
+    app.add_url_rule('/orders/<int:oid>/pickup-qr','pickup_qr',login_required(feature.pickup_qr),methods=['GET','POST'])
     app.add_url_rule('/admin/payment-proofs/<int:pid>/<decision>','payment_review',admin_required(feature.payment_review),methods=['POST'])
     app.add_url_rule('/admin/payment-proofs/<int:pid>/files/<kind>','payment_file',admin_required(feature.payment_file),methods=['POST'])
 
@@ -401,6 +402,39 @@ class Features:
         ok=self.telegram.document(chat,o[kind],t('file.caption',id=oid,item=o['item']))
         flash(t('file.sent' if ok else 'file.failed'),'success' if ok else 'error')
         return redirect(url_for('admin')+'#orders' if g.user['role']=='admin' else url_for('dashboard'))
+
+    def pickup_qr(self,oid):
+        if request.method=='GET':
+            order=self.owned_order(oid,admin=True)
+            if order['delivery']!='InPost locker' or not order['pickup_qr']: abort(404)
+            service=self.app.extensions.get('services')
+            data=service.file_bytes(order['pickup_qr']) if service else (Path(self.app.config['UPLOAD_FOLDER'])/order['pickup_qr']).read_bytes()
+            if data is None: abort(404)
+            ext=Path(order['pickup_qr']).suffix.lower()
+            mimetype={'.jpg':'image/jpeg','.jpeg':'image/jpeg','.png':'image/png','.webp':'image/webp'}.get(ext,'application/octet-stream')
+            return send_file(io.BytesIO(data),mimetype=mimetype,download_name=order['pickup_qr'],as_attachment=False)
+        if g.user['role']!='client': abort(403)
+        c=self.db()
+        try:
+            upload=request.files.get('pickup_qr')
+            if not upload or not upload.filename:
+                flash(t('qr.file_missing'),'error');return redirect(url_for('parcel_detail',oid=oid))
+            validated=self.read_file('pickup_qr')
+            c.execute('BEGIN IMMEDIATE')
+            order=self.owned_order(oid)
+            if order['delivery']!='InPost locker' or order['status'] not in ('Доставлено','Архив') or not order['delivered_at']:
+                c.rollback();abort(409)
+            name=self.save_file(validated,'pickup_qr')
+            c.execute('UPDATE orders SET pickup_qr=? WHERE id=?',(name,oid));c.commit()
+        except ValueError as e:
+            c.rollback();flash(str(e),'error');return redirect(url_for('parcel_detail',oid=oid))
+        message=f'QR-код к посылке MP · {oid:04d} прикреплён! Можно забирать посылку с локера InPost.'
+        if not self.telegram.document(self.app.config.get('TELEGRAM_ADMIN_CHAT_ID',''),name,message):
+            service=self.app.extensions.get('services')
+            if service: service.queue_chat(self.app.config.get('TELEGRAM_ADMIN_CHAT_ID',''),message)
+            else: self.telegram.message(self.app.config.get('TELEGRAM_ADMIN_CHAT_ID',''),message)
+        flash(t('qr.uploaded'),'success')
+        return redirect(url_for('parcel_detail',oid=oid))
 
     def payment_file(self,pid,kind):
         if kind not in ('screenshot','receipt'): abort(404)

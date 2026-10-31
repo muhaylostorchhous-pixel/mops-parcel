@@ -34,7 +34,7 @@ def migrate(db, database):
             db.backup(dest)
     additions = {
         'users': {'phone':"TEXT DEFAULT ''", 'language':"TEXT DEFAULT 'ru'", 'onboarding_completed':'INTEGER DEFAULT 1', 'leaderboard_public':'INTEGER DEFAULT 0'},
-        'orders': {'submission_key':"TEXT DEFAULT ''", 'product_type':"TEXT DEFAULT ''", 'ua_name':"TEXT DEFAULT ''", 'ua_phone':"TEXT DEFAULT ''", 'ua_city':"TEXT DEFAULT ''", 'ua_branch':"TEXT DEFAULT ''", 'uk_address':"TEXT DEFAULT ''", 'parcel_code':"TEXT DEFAULT ''", 'payment_status':"TEXT DEFAULT 'unpaid'", 'delivered_at':"TEXT DEFAULT ''"},
+        'orders': {'submission_key':"TEXT DEFAULT ''", 'product_type':"TEXT DEFAULT ''", 'ua_name':"TEXT DEFAULT ''", 'ua_phone':"TEXT DEFAULT ''", 'ua_city':"TEXT DEFAULT ''", 'ua_branch':"TEXT DEFAULT ''", 'uk_address':"TEXT DEFAULT ''", 'parcel_code':"TEXT DEFAULT ''", 'payment_status':"TEXT DEFAULT 'unpaid'", 'delivered_at':"TEXT DEFAULT ''", 'pickup_qr':"TEXT DEFAULT ''"},
     }
     db.execute('BEGIN IMMEDIATE')
     try:

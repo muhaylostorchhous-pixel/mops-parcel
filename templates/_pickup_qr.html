@@ -1,0 +1,25 @@
+{% if order.delivery=='InPost locker' and order.delivered_at and order.status in ['Доставлено','Архив'] %}
+<details class="pickup-qr-panel" {% if not order.pickup_qr %}open{% endif %}>
+  <summary>
+    <span>{{ t('qr.title') }}</span>
+    <span class="status-pill">{{ t('qr.added') if order.pickup_qr else t('qr.required') }}</span>
+  </summary>
+  <div class="pickup-qr-content">
+    {% if order.pickup_qr %}
+    <a href="{{ url_for('pickup_qr',oid=order.id) }}" target="_blank" rel="noopener">
+      <img class="pickup-qr-preview" src="{{ url_for('pickup_qr',oid=order.id) }}" alt="{{ t('qr.title') }}">
+    </a>
+    <a class="text-button" href="{{ url_for('pickup_qr',oid=order.id) }}" target="_blank" rel="noopener">{{ t('qr.view') }} ↗</a>
+    {% else %}
+    <p>{{ t('qr.required_hint') }}</p>
+    {% endif %}
+    {% if user.role!='admin' %}
+    <form method="post" action="{{ url_for('pickup_qr',oid=order.id) }}" enctype="multipart/form-data">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label class="file-button">{{ t('qr.replace') if order.pickup_qr else t('qr.upload') }}<input type="file" name="pickup_qr" accept="image/jpeg,image/png,image/webp" required></label>
+      <button class="button primary small-btn">{{ t('qr.replace') if order.pickup_qr else t('qr.upload') }} ↗</button>
+    </form>
+    {% endif %}
+  </div>
+</details>
+{% endif %}
