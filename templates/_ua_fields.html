@@ -1,0 +1,4 @@
+<label>{{ t('profile.fullname') }}<input name="ua_name" autocomplete="shipping name" required maxlength="200" value="{{ request.form.get('ua_name', user.name) }}"></label>
+<label>{{ t('Телефон') }}<input name="ua_phone" type="tel" autocomplete="shipping tel" required value="{{ request.form.get('ua_phone', user.phone) }}" placeholder="+380 …"></label>
+<label>{{ t('address.city') }}<input name="ua_city" autocomplete="shipping address-level2" required maxlength="200" value="{{ request.form.get('ua_city','') }}"></label>
+<label>{{ t('address.branch') }}<input name="ua_branch" required maxlength="200" value="{{ request.form.get('ua_branch','') }}" placeholder="{{ t('address.branch_hint') }}"></label>

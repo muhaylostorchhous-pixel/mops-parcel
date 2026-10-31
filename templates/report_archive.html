@@ -1,0 +1,15 @@
+{% extends 'base.html' %}
+{% block title %}{{ t('arc.title') }} — Mops Parcel{% endblock %}
+{% block content %}<section class="wrap dashboard">
+<div class="dash-heading"><div><span class="section-kicker">MOPS / TELEGRAM</span><h1>{{ t('arc.title') }}</h1></div><a class="button ghost" href="/admin">{{ t('Панель') }}</a></div>
+<p class="lead">{{ t('arc.intro') }}</p><div class="notice"><p>{{ t('arc.ready') if archive_enabled else t('arc.disabled') }}</p>{% if not archive_enabled %}<p>{{ t('arc.setup') }}</p>{% endif %}</div>
+<p>{{ t('arc.saved_bytes') }}: <strong>{{ removed_mb }} MB</strong></p>
+<form method="post" action="/admin/report-archive/retry"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="button primary" {% if not archive_enabled %}disabled{% endif %}>{{ t('arc.retry') }}</button></form>
+{% for a in archive_rows %}<article class="detail-panel archive-job"><div class="admin-row"><div><b><a href="/orders/{{ a.order_id }}">MP · {{ a.order_id }} · {{ a.item }} ↗</a></b><span>{{ a.parcel_code or '—' }}</span></div><span class="status-pill">{{ t('arc.'+a.state) }}</span></div>
+{% if a.last_error %}<p>{{ t('arc.'+a.last_error) }}</p>{% endif %}
+{% if a.cleaned_at and (a.bot_id!=archive_bot_id or a.archive_chat_id!=archive_channel) %}<p class="notice">{{ t('arc.bot_changed') }}</p>{% endif %}
+{% if a.cleaned_at %}<p>{{ t('arc.saved_bytes') }} · {{ (a.removed_bytes/1048576)|round(2) }} MB <time datetime="{{ a.cleaned_at }}" data-local-time>{{ a.cleaned_at|parcel_date }}</time></p>{% endif %}
+{% if a.archive_chat_id.startswith('-100') and a.archive_message_id %}<a class="text-button" href="https://t.me/c/{{ a.archive_chat_id[4:] }}/{{ a.archive_message_id }}" target="_blank" rel="noopener noreferrer">{{ t('arc.open') }} ↗</a>{% endif %}
+</article>{% else %}<p class="muted">{{ t('svc.empty') }}</p>{% endfor %}
+<nav class="page-links">{% if page>1 %}<a href="{{ url_for('report_archive',page=page-1) }}">{{ t('svc.previous') }}</a>{% endif %}<span>{{ page }}</span>{% if has_more %}<a href="{{ url_for('report_archive',page=page+1) }}">{{ t('svc.next') }}</a>{% endif %}</nav>
+</section>{% endblock %}
