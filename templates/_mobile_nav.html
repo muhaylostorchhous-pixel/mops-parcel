@@ -1,0 +1,4 @@
+{% if user %}<nav class="mobile-dock" aria-label="{{ t('ux.navigation') }}">
+{% set links = [('/admin' if user.role=='admin' else '/dashboard','parcels','Панель' if user.role=='admin' else 'ux.orders'),('/orders/new','plus','ux.new'),('/support','chat','svc.support'),('/profile','user','profile.title')] %}
+{% for href,icon,label in links %}<a href="{{ href }}" {% if request.path==href or (href=='/dashboard' and request.endpoint=='parcel_detail') %}aria-current="page"{% endif %} class="{{ 'dock-add' if icon=='plus' else '' }}"><svg aria-hidden="true"><use href="{{ url_for('static',filename='parcel-art.svg') }}#{{ icon }}"></use></svg><span>{{ t(label) }}</span>{% if icon=='chat' and support_unread %}<i aria-label="{{ support_unread }}">{{ support_unread if support_unread<100 else '99+' }}</i>{% endif %}</a>{% endfor %}
+</nav>{% endif %}

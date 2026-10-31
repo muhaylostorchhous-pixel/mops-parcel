@@ -1,0 +1,6 @@
+<section class="workspace-summary" aria-label="{{ t('ux.overview') }}">
+<div><span>{{ t('ux.active') }}</span><strong>{{ workspace_stats.active or 0 }}</strong><small>UK → UA</small></div>
+<div><span>{{ t('ux.payment') }}</span><strong>{{ workspace_stats.unpaid or 0 }}</strong><small>{{ t('payment.title') }}</small></div>
+<div><span>{{ t('ux.delivered') }}</span><strong>{{ workspace_stats.delivered or 0 }}</strong><small>{{ t('ux.archive') }}</small></div>
+<div class="rank-summary"><span>{{ t('ux.rank') }}</span><strong>{{ t(profile_stats.rank) }}</strong><small>{{ t('БОНУСНЫЙ БАЛАНС') }} · {{ user.bonus_balance or 0 }}</small></div>
+</section>
