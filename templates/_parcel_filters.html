@@ -1,4 +1,0 @@
-<div class="parcel-tools" data-filter-toolbar><label class="search-field"><span class="sr-only">{{ t('ux.search') }}</span><input type="search" data-parcel-search placeholder="{{ t('ux.search') }}" autocomplete="off"></label><div class="filter-chips" aria-label="{{ t('Статус') }}">
-{% for value,label in [('all','ux.all'),('payment','ux.payment'),('warehouse','ux.warehouse'),('transit','ux.transit')] %}<button type="button" data-parcel-filter="{{ value }}" aria-pressed="{{ 'true' if value=='all' else 'false' }}">{{ t(label) }}</button>{% endfor %}
-</div><span data-result-count class="sr-only" role="status" aria-live="polite"></span></div>
-<div class="filter-empty" data-filter-empty hidden><h3>{{ t('ux.empty') }}</h3><button class="text-button" type="button" data-filter-reset>{{ t('ux.reset') }}</button></div>
