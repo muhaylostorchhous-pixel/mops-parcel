@@ -1,2 +1,0 @@
-{% set art = 'delivered' if o.status in ['Доставлено','Архив'] else 'received' if o.status in ['Одержано','Фотоотчёт готов'] else 'truck' if o.status in ['К отправке','Отправлено'] else 'box' %}
-<div class="delivery-art art-{{ art }}" aria-hidden="true"><svg class="parcel-illustration"><use href="{{ url_for('static',filename='parcel-art.svg') }}#{{ art }}"></use></svg><span class="art-caption">UK <span>→</span> UA</span></div>
