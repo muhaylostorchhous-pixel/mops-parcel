@@ -60,5 +60,14 @@ ux.faq.report|Где посмотреть фотографии?|Де перег�
 ux.faq.report_a|Открой посылку и нажми кнопку фотоотчёта. Бот отправит фотографии файлами в твой Telegram.|Відкрий посилку та натисни кнопку фотозвіту. Бот надішле фотографії файлами у твій Telegram.|Open your parcel and select the photo report button. The bot will send the photos as files to your Telegram.
 ux.duplicate|Эта заявка уже отправлена. Открываем твои посылки.|Цю заявку вже надіслано. Відкриваємо твої посилки.|This request has already been submitted. Opening your parcels.
 ux.session|Обнови страницу и попробуй ещё раз.|Онови сторінку та спробуй ще раз.|Refresh the page and try again.
+qr.title|Код получения InPost|Код отримання InPost|InPost pickup code
+qr.required|Обязательно добавить|Обов’язково додати|Required
+qr.required_hint|Посылка доставлена в локер. Обязательно прикрепите фото QR-кода, чтобы забрать её.|Посилку доставлено до локера. Обов’язково додайте фото QR-коду, щоб забрати її.|The parcel has arrived at the locker. Upload its QR code photo to pick it up.
+qr.upload|Прикрепить фото QR-кода|Додати фото QR-коду|Upload QR code photo
+qr.replace|Обновить QR-фото|Оновити QR-фото|Replace QR code photo
+qr.added|Добавлен|Додано|Added
+qr.uploaded|QR-код сохранён. Администратор уведомлён.|QR-код збережено. Адміністратора повідомлено.|QR code saved. The administrator has been notified.
+qr.view|Открыть QR-код|Відкрити QR-код|Open QR code
+qr.file_missing|Прикрепите фото QR-кода.|Додайте фото QR-коду.|Attach a QR code photo.
 '''
 STRINGS = {key: dict(zip(('ru', 'uk', 'en'), values)) for key, *values in (line.split('|') for line in ROWS.strip().splitlines())}
