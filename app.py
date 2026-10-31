@@ -63,7 +63,6 @@ def create_app(config=None):
   except requests.RequestException: app.logger.warning("Telegram delivery failed")
  def admin_msg(msg): send_tg(app.config["TELEGRAM_ADMIN_CHAT_ID"],msg)
  def client_msg(contact,msg):
-  # Numeric Telegram chat ID is required; @username alone is not enough for bot messages.
   row=db().execute("SELECT telegram_chat_id FROM users WHERE telegram=?",(contact,)).fetchone()
   if row and row["telegram_chat_id"]: send_tg(row["telegram_chat_id"],msg)
  def login_required(fn):
@@ -118,7 +117,7 @@ def create_app(config=None):
   return {"t":t,"lang":getattr(g,"lang","ru"),"ui_strings":{k:t(k) for k in CATALOG},"localized_changes":localized_changes,"manager_username":manager,"manager_is_admin":manager=="amrbasota"}
  @app.errorhandler(HTTPException)
  def http_error(error):
-  titles={403:"Недостаточно прав",404:"Страница не найдена",409:"Действие недоступно",410:"Срок ответа истёк"}
+  titles={403:"Недостаточно прав",404:"Страница не найдена",409:"Действие недоступно",410:"Срок ответа истёк",429:"Слишком много запросов. Подождите пару минут."}
   return render_template("error.html",error_code=error.code,error_title=titles.get(error.code,"Не удалось выполнить запрос")),error.code
  @app.context_processor
  def common(): return {"user":g.get("user"),"statuses":STATUSES,"review_url":"https://t.me/resalecommunityy/975","telegram_bot_url":("https://t.me/"+os.getenv("TELEGRAM_BOT_USERNAME","").lstrip("@")) if os.getenv("TELEGRAM_BOT_USERNAME") else None}
@@ -286,8 +285,3 @@ def create_app(config=None):
  return app
 app=create_app()
 if __name__=="__main__": app.run(host="0.0.0.0",port=int(os.getenv("PORT","5000")))
-
-
-
-
-

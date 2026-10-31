@@ -22,7 +22,6 @@ def install_archive(app, db, stamp, admin_required):
     app.extensions['report_archive']=archive
     with app.app_context():
         c=db()
-        # Include existing reports, without purging or contacting Telegram at startup.
         c.execute("INSERT INTO report_archives(name,order_id,created) SELECT report,MIN(id),MIN(created) FROM orders WHERE report<>'' GROUP BY report ON CONFLICT(name) DO NOTHING")
         c.commit()
 
@@ -97,7 +96,6 @@ class ReportArchive:
                 self.telegram.document(channel,name,t('arc.caption','ru',id=o['id'],item=o['item'],code=o['parcel_code'] or '—'))
                 receipt=self.receipt(name,channel);c.commit()
             if not receipt:self.finish(name,lease,'telegram_failed');return
-            # Persist the archive receipt even when the client has not linked the bot yet.
             c.execute('UPDATE report_archives SET bot_id=?,archive_chat_id=?,archive_file_id=?,archive_message_id=? WHERE name=? AND lease_token=?',(bot,channel,receipt['file_id'],receipt['message_id'],name,lease));c.commit()
             client=o['telegram_chat_id']
             if not client:self.finish(name,lease,'link_telegram');return
@@ -109,7 +107,6 @@ class ReportArchive:
             c.execute('UPDATE report_archives SET client_chat_id=?,client_message_id=?,confirmed_at=? WHERE name=? AND lease_token=?',(str(client),customer['message_id'],self.stamp(),name,lease));c.commit()
             if o['status'] not in ('Доставлено','Архив') or not o['delivered_at'] or not o['archived']:
                 self.finish(name,lease,state='confirmed');return
-            # Confirm that this bot can still retrieve the file before deleting any bytes.
             probe=self.telegram.call('getFile',{'file_id':receipt['file_id']})
             if not isinstance(probe,dict) or not probe.get('file_path') or not probe.get('file_id'):
                 self.finish(name,lease,'file_unavailable');return
@@ -121,7 +118,7 @@ class ReportArchive:
                 c.rollback();self.finish(name,lease,'bot_changed');return
             if fresh['status'] not in ('Доставлено','Архив') or not fresh['delivered_at'] or not fresh['archived']:
                 c.rollback();self.finish(name,lease,state='confirmed');return
-            shared=c.execute('SELECT 1 FROM orders WHERE proof=? OR item_photo=? OR (report=? AND id<>?) UNION SELECT 1 FROM reviews WHERE image=? UNION SELECT 1 FROM order_payments WHERE screenshot=? OR receipt=?',(name,name,name,o['id'],name,name,name)).fetchone()
+            shared=c.execute('SELECT 1 FROM orders WHERE proof=? OR item_photo=? OR qr_code=? OR (report=? AND id<>?) UNION SELECT 1 FROM reviews WHERE image=? UNION SELECT 1 FROM order_payments WHERE screenshot=? OR receipt=?',(name,name,name,name,o['id'],name,name,name)).fetchone()
             if shared:c.rollback();self.finish(name,lease,'shared_file','failed');return
             size=c.execute('SELECT LENGTH(data) FROM file_objects WHERE name=?',(name,)).fetchone()
             c.execute('DELETE FROM file_objects WHERE name=?',(name,))

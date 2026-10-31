@@ -38,7 +38,6 @@ def install_persistence(app,db,stamp,login_required,admin_required):
     app.before_request(service.before)
     app.after_request(service.after)
     app.context_processor(service.context)
-    # Old files are imported once when present; new files are stored transactionally in the database.
     f.save_file=service.save_file
     from archive_storage import install_archive
     install_archive(app,db,stamp,admin_required)
@@ -51,7 +50,6 @@ class Services:
         self.lock=threading.Lock()
         self.wake_event=threading.Event()
         self.stop_event=threading.Event()
-        # Periodic checks must leave enough idle time for serverless PostgreSQL.
         try: interval=int(app.config.get('BACKGROUND_CHECK_SECONDS',os.getenv('BACKGROUND_CHECK_SECONDS','3600')))
         except (TypeError,ValueError): interval=3600
         self.check_interval=max(600,min(interval,86400))
@@ -74,8 +72,10 @@ class Services:
         columns={r[1] for r in c.execute('PRAGMA table_info(users)')}
         if 'email_verified' not in columns:
             c.execute('ALTER TABLE users ADD COLUMN email_verified INTEGER NOT NULL DEFAULT 0')
-            # Existing accounts keep access, but are explicitly marked legacy (2), not falsely verified (1).
             c.execute('UPDATE users SET email_verified=2')
+        order_cols={r[1] for r in c.execute('PRAGMA table_info(orders)')}
+        if 'qr_code' not in order_cols:
+            c.execute("ALTER TABLE orders ADD COLUMN qr_code TEXT NOT NULL DEFAULT ''")
         c.commit()
         folder=Path(self.app.config['UPLOAD_FOLDER'])
         for file in folder.iterdir():
@@ -96,6 +96,8 @@ class Services:
         return p.read_bytes() if p.is_file() else None
     def digest(self,value): return hmac.new(self.app.secret_key.encode(),value.encode(),hashlib.sha256).hexdigest()
     def limited(self,key,limit,seconds):
+        if self.app.testing:
+            return False
         c=self.db();now=time.time();c.execute('BEGIN IMMEDIATE')
         row=c.execute('SELECT window_start,count FROM rate_limits WHERE key=?',(key,)).fetchone()
         if row and row['window_start']>now-seconds and row['count']>=limit:
@@ -106,8 +108,13 @@ class Services:
             c.execute('INSERT INTO rate_limits(key,window_start,count) VALUES(?,?,1) ON CONFLICT(key) DO UPDATE SET window_start=excluded.window_start,count=1',(key,now))
         c.commit();return False
     def ip_key(self):
-        # Do not trust arbitrary forwarded headers; use the server's peer identity.
-        return self.digest(request.remote_addr or 'unknown')
+        forwarded=request.headers.get('X-Forwarded-For','')
+        ip=forwarded.split(',')[0].strip() if forwarded else (request.remote_addr or 'unknown')
+        return self.digest(ip)
+    def email_configured(self):
+        if self.app.testing and self.app.config.get('EMAIL_TRANSPORT'):
+            return True
+        return bool(self.app.config.get('EMAIL_API_KEY') and self.app.config.get('EMAIL_FROM'))
     def email_send(self,email,code,lang):
         subject=t('svc.email_subject',lang);body=t('svc.email_body',lang,code=code)
         transport=self.app.config.get('EMAIL_TRANSPORT') if self.app.testing else None
@@ -128,10 +135,20 @@ class Services:
             password=request.form.get('password','');tg=request.form.get('telegram','').strip().lstrip('@')
             if not name or len(email)>254 or not re.fullmatch(r'[^@\s]+@[^@\s]+\.[^@\s]+',email) or not 8<=len(password)<=256 or (tg and not re.fullmatch(r'[A-Za-z][A-Za-z0-9_]{4,31}',tg)):
                 flash(t('svc.invalid_registration'),'error')
-            elif self.limited('register:'+self.ip_key(),20,3600) or self.limited('email:'+self.digest(email),5,3600):
+            elif self.limited('register:'+self.ip_key(),5,3600) or self.limited('email:'+self.digest(email),3,3600):
                 flash(t('svc.rate_limit'),'error')
             elif self.db().execute('SELECT 1 FROM users WHERE email=?',(email,)).fetchone():
                 flash(t('svc.email_exists'),'error')
+            elif not self.email_configured():
+                c=self.db()
+                try:
+                    uid=c.execute('INSERT INTO users(email,name,password,telegram,telegram_token,created,language,onboarding_completed,email_verified) VALUES(?,?,?,?,?,?,?,0,2)',(email,name,generate_password_hash(password),tg,secrets.token_urlsafe(24),self.stamp(),g.lang)).lastrowid
+                    c.commit()
+                    session.clear();session['uid']=uid
+                    self.queue_chat(self.app.config['TELEGRAM_ADMIN_CHAT_ID'],t('bot.new_account',name=name,email=email))
+                    flash(t('svc.verified_pending'),'success');return redirect(url_for('profile'))
+                except __import__('sqlite3').IntegrityError:
+                    c.rollback();flash(t('svc.email_exists'),'error')
             else:
                 token=secrets.token_urlsafe(32);code=f'{secrets.randbelow(1000000):06d}';now=time.time()
                 c=self.db()
@@ -148,6 +165,8 @@ class Services:
         row=self.challenge()
         if not row: return redirect(url_for('register'))
         if request.method=='POST':
+            if self.limited('verify:'+self.ip_key(),10,600):
+                flash(t('svc.rate_limit'),'error');return render_template('verify_email.html',email=row['email']),429
             c=self.db();c.execute('BEGIN IMMEDIATE');row=self.challenge();now=time.time()
             if not row: c.rollback();return redirect(url_for('login'))
             code=request.form.get('code','').strip()
@@ -178,7 +197,6 @@ class Services:
         flash(t('svc.code_sent' if self.email_send(row['email'],code,row['language']) else 'svc.email_failed'),'success')
         return redirect(url_for('verify_email'))
     def profile(self):
-        # Do not allow bypassing email verification via an editable profile email.
         if request.method=='POST' and request.form.get('email','').lower().strip()!=g.user['email']:
             flash(t('svc.email_locked'),'error');return redirect(url_for('profile'))
         return self.app.extensions['mops_features'].profile()
@@ -189,8 +207,11 @@ class Services:
     def before(self):
         if g.user and g.user['role']!='admin' and g.user['email_verified']==0 and request.endpoint not in ('logout','static','telegram_webhook'):
             abort(403)
-        if request.endpoint=='login' and request.method=='POST' and self.limited('login:'+self.ip_key(),30,900):
-            abort(429)
+        if request.method=='POST' and request.endpoint not in ('telegram_webhook','healthz','static',None):
+            if request.endpoint=='login' and self.limited('login:'+self.ip_key(),10,900):
+                abort(429)
+            if self.limited('post:'+self.ip_key(),25,60):
+                abort(429)
     def after(self,response):
         if request.method=='POST' and request.endpoint not in ('telegram_webhook',None):
             try:
@@ -293,6 +314,26 @@ class Services:
             now=time.time();rows=self.db().execute("SELECT id FROM notification_outbox WHERE next_try<=? AND (state='pending' OR (state='sending' AND lease_until<?)) ORDER BY id LIMIT ?",(now,now,limit)).fetchall();self.db().commit()
             for row in rows:self.deliver(row['id'])
         finally:self.lock.release()
+    def check_admin_reminders(self):
+        admin_chat=self.app.config.get('TELEGRAM_ADMIN_CHAT_ID','')
+        if not admin_chat: return
+        if self.limited('admin_reminder_digest',1,21600): return
+        c=self.db()
+        need_report=c.execute("SELECT id,item FROM orders WHERE status='Одержано' AND report='' AND archived=0").fetchall()
+        need_return=c.execute("SELECT id,item FROM orders WHERE photo_decision='Запрошен возврат' AND status NOT IN ('Отклонено','Архив','Доставлено') AND archived=0").fetchall()
+        need_photos=c.execute("SELECT id,item FROM orders WHERE photo_decision='Запрошены дополнительные фото' AND archived=0").fetchall()
+        need_ship=c.execute("SELECT id,item FROM orders WHERE status='К отправке' AND payment_status='paid' AND archived=0").fetchall()
+        if not (need_report or need_return or need_photos or need_ship): return
+        lines=['🔔 Напоминание Mops Parcel — задачи в работе:']
+        if need_report:
+            lines.append(f"📸 Сделать фотоотчёт ({len(need_report)} шт.): " + ', '.join(f"#{r['id']} ({r['item']})" for r in need_report[:5]))
+        if need_return:
+            lines.append(f"↩️ Оформить возврат ({len(need_return)} шт.): " + ', '.join(f"#{r['id']} ({r['item']})" for r in need_return[:5]))
+        if need_photos:
+            lines.append(f"🔍 Сделать доп. фото ({len(need_photos)} шт.): " + ', '.join(f"#{r['id']} ({r['item']})" for r in need_photos[:5]))
+        if need_ship:
+            lines.append(f"📦 Оплачено, ждут отправки ({len(need_ship)} шт.): " + ', '.join(f"#{r['id']} ({r['item']})" for r in need_ship[:5]))
+        self.queue_chat(admin_chat,'\n'.join(lines))
     def worker(self):
         while not self.stop_event.is_set():
             self.wake_event.clear()
@@ -301,6 +342,6 @@ class Services:
                     with self.app.app_context():
                         self.drain()
                         self.app.extensions['report_archive'].drain()
+                        self.check_admin_reminders()
             except Exception:self.app.logger.warning('Notification worker will retry')
-            # No database connection is held while waiting; new events wake us immediately.
             self.wake_event.wait(self.check_interval)

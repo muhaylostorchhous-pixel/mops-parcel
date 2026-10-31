@@ -24,8 +24,7 @@ CATALOG.update(EXTRA)
 def install_features(app, db, stamp, login_required, admin_required):
     feature = Features(app, db, stamp)
     app.extensions['mops_features'] = feature
-    from discord_feed import install_discord
-    install_discord(app, db, login_required)
+    # Парсер Discord отключён
     with app.app_context():
         migrate(db(), app.config['DATABASE'])
     app.config.setdefault('CSRF_ENABLED', True)
@@ -51,6 +50,7 @@ def install_features(app, db, stamp, login_required, admin_required):
     app.add_url_rule('/profile/addresses','add_address',feature.signed_in(feature.add_address),methods=['POST'])
     app.add_url_rule('/onboarding/complete','onboarding_done',feature.signed_in(feature.onboarding_done),methods=['POST'])
     app.add_url_rule('/orders/<int:oid>/pay','pay_order',login_required(feature.pay_order),methods=['GET','POST'])
+    app.add_url_rule('/orders/<int:oid>/qr','upload_qr',login_required(feature.upload_qr),methods=['POST'])
     app.add_url_rule('/orders/<int:oid>/files/<kind>/send','send_file',login_required(feature.send_file),methods=['POST'])
     app.add_url_rule('/admin/payment-proofs/<int:pid>/<decision>','payment_review',admin_required(feature.payment_review),methods=['POST'])
     app.add_url_rule('/admin/payment-proofs/<int:pid>/files/<kind>','payment_file',admin_required(feature.payment_file),methods=['POST'])
@@ -69,6 +69,8 @@ class Features:
         return inner
 
     def guard(self):
+        if request.path.startswith('/parser') or request.path.startswith('/api/parser'):
+            abort(404)
         if request.endpoint in ('telegram_webhook','healthz','static'):
             return
         if 'csrf' not in session:
@@ -95,10 +97,24 @@ class Features:
         c = self.db()
         invoices = c.execute("SELECT * FROM orders WHERE user_id=? AND report<>'' AND fee<>'' AND payment_status<>'paid' AND archived=0 AND status<>'Отклонено' ORDER BY id DESC",(user['id'],)).fetchall() if user and user['role']=='client' else []
         submissions = c.execute("SELECT p.*,o.item,o.parcel_code,u.name AS client_name FROM order_payments p JOIN orders o ON o.id=p.order_id JOIN users u ON u.id=p.user_id WHERE p.state='pending' ORDER BY p.id",()).fetchall() if user and user['role']=='admin' else []
+        admin_tasks = None
+        if user and user['role'] == 'admin':
+            row = c.execute("""SELECT
+                SUM(CASE WHEN status='В процессе' THEN 1 ELSE 0 END) AS new_orders,
+                SUM(CASE WHEN status='Одержано' AND report='' THEN 1 ELSE 0 END) AS need_report,
+                SUM(CASE WHEN photo_decision='Запрошен возврат' AND archived=0 THEN 1 ELSE 0 END) AS need_return,
+                SUM(CASE WHEN photo_decision='Запрошены дополнительные фото' AND archived=0 THEN 1 ELSE 0 END) AS need_more_photos,
+                SUM(CASE WHEN status='К отправке' AND payment_status='paid' THEN 1 ELSE 0 END) AS ready_to_ship,
+                SUM(CASE WHEN qr_code<>'' AND archived=0 THEN 1 ELSE 0 END) AS with_qr
+                FROM orders WHERE archived=0 AND status<>'Отклонено'""").fetchone()
+            keys = ('new_orders','need_report','need_return','need_more_photos','ready_to_ship','with_qr')
+            tasks_dict = {k: (row[k] or 0) if row else 0 for k in keys}
+            total_todo = sum(tasks_dict[k] for k in ('new_orders','need_report','need_return','need_more_photos','ready_to_ship')) + len(submissions)
+            admin_tasks = dict(tasks_dict, payments=len(submissions), total=total_todo)
         manager = os.getenv('UKRAINE_MANAGER_USERNAME','').strip().lstrip('@') or 'barujka032'
         if not re.fullmatch(r'[A-Za-z0-9_]{5,32}',manager): manager='barujka032'
         return {'products':PRODUCTS, 'delivery_types':DELIVERIES, 'open_invoices':invoices,
-            'payment_submissions':submissions,'csrf_token':lambda:session.get('csrf',''),
+            'payment_submissions':submissions, 'admin_tasks':admin_tasks, 'csrf_token':lambda:session.get('csrf',''),
             'manager_username':manager,'manager_is_admin':False,
             'profile_stats':self.statistics(user['id']) if user else None,
             'uk_settings':dict(c.execute('SELECT key,value FROM settings')),
@@ -393,8 +409,25 @@ class Features:
     def recipient_chat(self):
         return g.user['telegram_chat_id'] or (self.app.config['TELEGRAM_ADMIN_CHAT_ID'] if g.user['role']=='admin' else '')
 
+    def upload_qr(self,oid):
+        o=self.owned_order(oid)
+        if o['status']=='Отклонено': abort(409)
+        try:
+            qr=self.read_file('qr_code')
+            c=self.db();c.execute('BEGIN IMMEDIATE')
+            qr_name=self.save_file(qr,'qr')
+            c.execute('UPDATE orders SET qr_code=?,updated=? WHERE id=?',(qr_name,self.stamp(),oid))
+            c.execute('INSERT INTO order_audit(order_id,user_id,action,created) VALUES(?,?,?,?)',(oid,g.user['id'],'Добавлен QR-код для получения',self.stamp()))
+            c.commit()
+            self.telegram.message(self.app.config['TELEGRAM_ADMIN_CHAT_ID'],f"📲 Клиент {g.user['name']} прикрепил QR-код для получения посылки #{oid} ({o['item']}).")
+            self.telegram.document(self.app.config['TELEGRAM_ADMIN_CHAT_ID'],qr_name,f"QR-код · Заявка #{oid} · {o['item']}")
+            flash('QR-код для получения прикреплён и отправлен администратору.','success')
+        except ValueError as e:
+            flash(str(e),'error')
+        return redirect(request.referrer or url_for('dashboard'))
+
     def send_file(self,oid,kind):
-        if kind not in ('proof','item_photo','report'): abort(404)
+        if kind not in ('proof','item_photo','report','qr_code'): abort(404)
         o=self.owned_order(oid,admin=True)
         if not o[kind]: abort(404)
         chat=self.recipient_chat()
@@ -416,14 +449,12 @@ class Features:
         return redirect(url_for('admin')+'#payment-proofs')
 
     def legacy_file(self,name):
-        # Existing bookmarks resolve to an authenticated file-delivery page, never to raw media.
         if Path(name).name!=name: abort(404)
-        o=self.db().execute('SELECT * FROM orders WHERE proof=? OR item_photo=? OR report=?',(name,name,name)).fetchone()
+        o=self.db().execute('SELECT * FROM orders WHERE proof=? OR item_photo=? OR report=? OR qr_code=?',(name,name,name,name)).fetchone()
         if o:
             self.owned_order(o['id'],admin=True)
-            kind=next(k for k in ('proof','item_photo','report') if o[k]==name)
+            kind=next(k for k in ('proof','item_photo','report','qr_code') if o[k]==name)
             return render_template('telegram_file.html',order=o,kind=kind)
-        # Review attachments remain downloadable for their owner/admin, not displayed inline.
         review=self.db().execute('SELECT * FROM reviews WHERE image=?',(name,)).fetchone()
         if not review or (g.user['role']!='admin' and review['user_id']!=g.user['id']): abort(403)
         from flask import send_file
@@ -455,8 +486,6 @@ class Features:
         rows=[]
         if parsed.scheme=='https' and parsed.hostname and not parsed.username and not parsed.password:
             rows.append([{'text':t('bot.open',lang),'web_app':{'url':url}}])
-        if rows:
-            rows.append([{'text':t('feed.title',lang),'web_app':{'url':url+'/parser'}}])
         rows.append([{'text':t('bot.leaders',lang),'callback_data':'leaders'},{'text':t('Язык',lang),'callback_data':'language'}])
         return rows
 
@@ -509,8 +538,6 @@ class Features:
                 lines.append(f"{i}. {label} — {row['completed']} · {t(rank_key(row['completed']),lang)}")
             if not rows: lines.append(t('bot.no_leaders',lang))
             self.telegram.message(chat_id,'\n'.join(lines),self.webapp_keyboard(lang))
-        elif command=='/parser':
-            self.telegram.message(chat_id,t('feed.subtitle',lang),self.webapp_keyboard(lang))
         elif command=='/orders' and user:
             orders=c.execute('SELECT item,status,parcel_code FROM orders WHERE user_id=? AND archived=0 ORDER BY id DESC LIMIT 10',(user['id'],)).fetchall()
             lines=[t('Мои посылки',lang)]+[f"{o['parcel_code'] or '—'} · {o['item']} · {t(o['status'],lang)}" for o in orders]
