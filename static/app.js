@@ -111,3 +111,20 @@ if ("IntersectionObserver" in window && !window.matchMedia("(prefers-reduced-mot
     reveal.observe(element);
   });
 }
+const heroVan = document.querySelector("[data-van]");
+if (heroVan) {
+  let vanResetTimer;
+  const burstVan = () => {
+    if (heroVan.classList.contains("is-exploding")) return;
+    heroVan.classList.add("is-exploding");
+    window.clearTimeout(vanResetTimer);
+    vanResetTimer = window.setTimeout(() => heroVan.classList.remove("is-exploding"), 700);
+  };
+  heroVan.addEventListener("click", burstVan);
+  heroVan.addEventListener("keydown", event => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      burstVan();
+    }
+  });
+}
