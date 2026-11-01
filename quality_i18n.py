@@ -82,5 +82,9 @@ return.qr_title|QR-код возврата|QR-код повернення|Return
 return.qr_upload|Прикрепить QR-код возврата|Додати QR-код повернення|Attach return QR code
 return.qr_missing|Клиент ещё не прикрепил QR-код возврата.|Клієнт ще не додав QR-код повернення.|The client has not attached the return QR code yet.
 return.qr_uploaded|QR-код возврата прикреплён. Администратор уведомлён.|QR-код повернення додано. Адміністратора повідомлено.|Return QR code attached. The administrator has been notified.
+order.delete|Удалить посылку|Видалити посилку|Delete parcel
+order.delete_confirm|Удалить эту посылку и все связанные файлы? Это действие нельзя отменить.|Видалити цю посилку та всі пов’язані файли? Цю дію не можна скасувати.|Delete this parcel and its attached files? This cannot be undone.
+order.deleted|Посылка и её вложения удалены.|Посилку та її вкладення видалено.|Parcel and its attachments deleted.
+return.paid_banner|ВОЗВРАТ ПРОДАВЦУ|ПОВЕРНЕННЯ ПРОДАВЦЮ|RETURN TO SELLER
 '''
 STRINGS = {key: dict(zip(('ru', 'uk', 'en'), values)) for key, *values in (line.split('|') for line in ROWS.strip().splitlines())}

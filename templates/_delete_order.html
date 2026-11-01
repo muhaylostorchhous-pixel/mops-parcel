@@ -1,0 +1,4 @@
+<form method="post" action="{{ url_for('delete_order',oid=order.id) }}" class="delete-order-form" onsubmit="return confirm({{ t('order.delete_confirm')|tojson }})">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <button class="button danger small-btn" type="submit">{{ t('order.delete') }}</button>
+</form>

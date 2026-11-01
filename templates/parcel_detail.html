@@ -11,6 +11,7 @@
 </article>
 {% include '_pickup_qr.html' %}
 {% include '_return_qr.html' %}
+{% include '_delete_order.html' %}
 <article class="detail-panel">{% if report_cleaned(order.report) %}<p class="notice">{{ t('arc.saved') }}</p><form method="post" action="/orders/{{ order.id }}/files/report/send"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="button ghost">{{ t('file.report') }} ↗</button></form>{% endif %}<span class="section-kicker">{{ t('ux.next') }}</span><h2>{{ t(order.status) }}</h2><p>{{ t(next_step(order)) }}</p>
 {% if order.report and not order.archived and order.status!='Отклонено' %}<form method="post" action="/orders/{{ order.id }}/files/report/send"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="button ghost">{{ t('file.report') }} ↗</button></form>
 {% if order.deadline and not order.photo_decision %}<p class="deadline">{{ t('ux.deadline') }} <time datetime="{{ order.deadline }}" data-local-time>{{ order.deadline|parcel_date }}</time></p>{% endif %}

@@ -1,4 +1,5 @@
 {% if order.photo_decision=='Запрошен возврат' %}
+{% if order.return_payment_status=='paid' %}<div class="return-paid-banner"><span aria-hidden="true">↩</span> {{ t('return.paid_banner') }}</div>{% endif %}
 <details class="pickup-qr-panel return-qr-panel" {% if order.return_payment_status=='paid' and not order.return_qr %}open{% endif %}>
   <summary><span>{{ t('return.title') }}</span><span class="status-pill">{{ t('payment.'+order.return_payment_status) }}</span></summary>
   <div class="pickup-qr-content">

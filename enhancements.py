@@ -54,6 +54,7 @@ def install_features(app, db, stamp, login_required, admin_required):
     app.add_url_rule('/orders/<int:oid>/pickup-qr','pickup_qr',login_required(feature.pickup_qr),methods=['GET','POST'])
     app.add_url_rule('/orders/<int:oid>/return-qr','return_qr',login_required(feature.return_qr),methods=['GET','POST'])
     app.add_url_rule('/orders/<int:oid>/vinted-delivered','vinted_delivered',login_required(feature.vinted_delivered),methods=['POST'])
+    app.add_url_rule('/orders/<int:oid>/delete','delete_order',login_required(feature.delete_order),methods=['POST'])
     app.add_url_rule('/admin/payment-proofs/<int:pid>/<decision>','payment_review',admin_required(feature.payment_review),methods=['POST'])
     app.add_url_rule('/admin/payment-proofs/<int:pid>/files/<kind>','payment_file',admin_required(feature.payment_file),methods=['POST'])
 
@@ -257,6 +258,41 @@ class Features:
         if not row: abort(404)
         if row['user_id']!=g.user['id'] and not (admin and g.user['role']=='admin'): abort(403)
         return row
+
+    def delete_order(self,oid):
+        order=self.owned_order(oid,admin=True)
+        c=self.db();c.execute('BEGIN IMMEDIATE')
+        files={order[k] for k in ('proof','item_photo','report','pickup_qr','return_qr') if order[k]}
+        payments=c.execute('SELECT screenshot,receipt FROM order_payments WHERE order_id=?',(oid,)).fetchall()
+        for payment in payments:
+            files.update(name for name in (payment['screenshot'],payment['receipt']) if name)
+        c.execute('DELETE FROM changes WHERE order_id=?',(oid,))
+        c.execute('DELETE FROM payment_requests WHERE order_id=?',(oid,))
+        c.execute('DELETE FROM order_payments WHERE order_id=?',(oid,))
+        c.execute('DELETE FROM order_audit WHERE order_id=?',(oid,))
+        c.execute('DELETE FROM report_archives WHERE order_id=?',(oid,))
+        c.execute('DELETE FROM orders WHERE id=?',(oid,))
+        orphaned=[]
+        for name in files:
+            shared=c.execute('''SELECT 1 FROM orders WHERE proof=? OR item_photo=? OR report=? OR pickup_qr=? OR return_qr=?
+                UNION SELECT 1 FROM reviews WHERE image=?
+                UNION SELECT 1 FROM order_payments WHERE screenshot=? OR receipt=?
+                UNION SELECT 1 FROM report_archives WHERE name=? LIMIT 1''',(name,name,name,name,name,name,name,name,name)).fetchone()
+            if not shared:
+                c.execute('DELETE FROM file_objects WHERE name=?',(name,))
+                c.execute('DELETE FROM telegram_files WHERE name=?',(name,))
+                c.execute('DELETE FROM telegram_deliveries WHERE name=?',(name,))
+                orphaned.append(name)
+        c.commit()
+        folder=Path(self.app.config['UPLOAD_FOLDER']).resolve()
+        for name in orphaned:
+            if Path(name).name==name:
+                path=(folder/name).resolve()
+                if path.parent==folder and path.is_file():
+                    try: path.unlink()
+                    except OSError: self.app.logger.warning('Could not remove orphaned order attachment')
+        flash(t('order.deleted'),'success')
+        return redirect(url_for('admin')+'#orders' if g.user['role']=='admin' else url_for('dashboard'))
 
     def notify_user(self,uid,key,**values):
         user=self.db().execute('SELECT * FROM users WHERE id=?',(uid,)).fetchone()
